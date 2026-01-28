@@ -645,8 +645,8 @@ void Gro_file::get_intramolecule_connectivity(int imol, float scaler_tol) {
 }
 
 void Gro_file::get_intermolecule_connectivity_of_selected_part() {
-    std::pair<Eigen::MatrixXf, Eigen::Vector<char, ncoords> > current;
-    Eigen::MatrixXi short_contact;
+    static std::pair<Eigen::MatrixXf, Eigen::Vector<char, ncoords> > current;
+    static Eigen::MatrixXi short_contact;
 
     for (int jmol = 0; jmol < nmols; ++ jmol) {
         for (int imol = jmol + 1; imol < nmols; ++ imol) {
@@ -654,17 +654,25 @@ void Gro_file::get_intermolecule_connectivity_of_selected_part() {
             current = get_dist_squared_matrix_orthorhombic(coordinates_selected[imol], coordinates_selected[jmol], box);
             short_contact = (current.first.array() < atomic_van_der_Waals_radius_selected_sum_squared.array()).cast<int>();
             num_intermolecule_short_contact_atoms(imol, jmol) = 
-            num_intermolecule_short_contact_atoms(jmol, imol) = 
                 short_contact.rowwise().any().sum() + 
                 short_contact.colwise().any().sum();
-            num_intermolecule_short_contact_pairs(imol, jmol) = 
-            num_intermolecule_short_contact_pairs(jmol, imol) = short_contact.sum();
-            shifts_min[coord_x](imol, jmol) = shifts_min[coord_x](jmol, imol) = current.second[coord_x];
-            shifts_min[coord_y](imol, jmol) = shifts_min[coord_y](jmol, imol) = current.second[coord_y];
-            shifts_min[coord_z](imol, jmol) = shifts_min[coord_z](jmol, imol) = current.second[coord_z];
+            num_intermolecule_short_contact_pairs(imol, jmol) = short_contact.sum();
+            shifts_min[coord_x](imol, jmol) = current.second[coord_x];
+            shifts_min[coord_y](imol, jmol) = current.second[coord_y];
+            shifts_min[coord_z](imol, jmol) = current.second[coord_z];
         }
     }
     std::cout << "\r" << std::setw(100) << "" << "\r" << std::flush;
+
+    for (int jmol = 0; jmol < nmols; ++ jmol) {
+        for (int imol = jmol + 1; imol < nmols; ++ imol) {
+            num_intermolecule_short_contact_atoms(jmol, imol) = num_intermolecule_short_contact_atoms(imol, jmol);
+            num_intermolecule_short_contact_pairs(jmol, imol) = num_intermolecule_short_contact_pairs(imol, jmol);
+            shifts_min[coord_x](jmol, imol) = shifts_min[coord_x](imol, jmol);
+            shifts_min[coord_y](jmol, imol) = shifts_min[coord_y](imol, jmol);
+            shifts_min[coord_z](jmol, imol) = shifts_min[coord_z](imol, jmol);
+        }
+    }
 }
 
 void Gro_file::write_mol_gjf(const std::string &ofilename, int imol, bool write_connectivity) const {
