@@ -103,6 +103,10 @@ std::pair<Eigen::MatrixXf, Eigen::Vector<char, ncoords> >
     get_dist_matrix_orthorhombic(const Eigen::MatrixXf &coord1, const Eigen::MatrixXf &coord2, const Eigen::Matrix3f box);
     // return dist_matrix and shift_min
 
+std::pair<Eigen::MatrixXf, Eigen::Vector<char, ncoords> > 
+    get_dist_squared_matrix_orthorhombic(const Eigen::MatrixXf &coord1, const Eigen::MatrixXf &coord2, const Eigen::Matrix3f box);
+    // return dist_squared_matrix and shift_min
+
 void print_box(const Eigen::Matrix3f &box);
 
 class Element_table {
@@ -130,6 +134,7 @@ public:
     Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> intramolecule_connectivity;
     Eigen::VectorXf atomic_van_der_Waals_radius_selected;
     Eigen::MatrixXf atomic_van_der_Waals_radius_selected_sum;
+    Eigen::MatrixXf atomic_van_der_Waals_radius_selected_sum_squared;
     std::vector<Eigen::MatrixXf> coordinates_selected;
     Eigen::Matrix3d box_d;
     Eigen::Matrix3f box;
@@ -396,6 +401,25 @@ std::pair<Eigen::MatrixXf, Eigen::Vector<char, ncoords> >
     return std::make_pair(dist_matrix, shift_min);
 }
 
+std::pair<Eigen::MatrixXf, Eigen::Vector<char, ncoords> > 
+    get_dist_squared_matrix_orthorhombic(const Eigen::MatrixXf &coord1, const Eigen::MatrixXf &coord2, const Eigen::Matrix3f box) {
+    Eigen::MatrixXf dist_squared_matrix;
+    // column-major
+    Eigen::Vector3f diag = box.diagonal();
+    Eigen::MatrixXf coords1_expanded_row = coord1.replicate(coord2.cols(), 1);
+    coords1_expanded_row.resize(ncoords, coord1.cols() * coord2.cols());
+    Eigen::MatrixXf coords2_expanded_col = coord2.replicate(1, coord1.cols());
+    Eigen::MatrixXf diff = coords2_expanded_col - coords1_expanded_row;
+    Eigen::MatrixXf shift_real = - (diff.array().colwise() / diag.array()).round();
+    diff.array() += shift_real.array().colwise() * diag.array();
+    dist_squared_matrix = diff.colwise().squaredNorm(); // Eigen::RowVector, shape (1, coord1.cols() * coord2.cols())
+    Eigen::MatrixXf::Index min_dist_pos;
+    float min_dist = dist_squared_matrix.row(0).minCoeff(& min_dist_pos);
+    dist_squared_matrix.resize(coord1.cols(), coord2.cols());
+    Eigen::Vector<char, ncoords> shift_min = shift_real.col(min_dist_pos).cast<char>();
+    return std::make_pair(dist_squared_matrix, shift_min);
+}
+
 void print_box(const Eigen::Matrix3f &box) {
     /*
     if (box.rows() != ncoords || box.cols() != ncoords) {
@@ -592,6 +616,7 @@ void Gro_file::set_selection_internal() {
         atomic_indices_selected.resize(natoms_selected);
         atomic_van_der_Waals_radius_selected.resize(natoms_selected);
         atomic_van_der_Waals_radius_selected_sum.resize(natoms_selected, natoms_selected);
+        atomic_van_der_Waals_radius_selected_sum_squared.resize(natoms_selected, natoms_selected);
         for (int imol = 0; imol < nmols; ++ imol) {
             coordinates_selected[imol].resize(ncoords, natoms_selected);
         }
@@ -608,6 +633,7 @@ void Gro_file::set_selection_internal() {
     atomic_van_der_Waals_radius_selected_sum = 
         atomic_van_der_Waals_radius_selected.replicate(1, natoms_selected) + 
         atomic_van_der_Waals_radius_selected.transpose().replicate(natoms_selected, 1);
+    atomic_van_der_Waals_radius_selected_sum_squared = atomic_van_der_Waals_radius_selected_sum.array().square();
 }
 
 void Gro_file::get_intramolecule_connectivity(int imol, float scaler_tol) {
@@ -625,8 +651,8 @@ void Gro_file::get_intermolecule_connectivity_of_selected_part() {
     for (int jmol = 0; jmol < nmols; ++ jmol) {
         for (int imol = jmol + 1; imol < nmols; ++ imol) {
             std::cout << "\rhandling imol = " << std::setw(3) << imol << ", jmol = " << std::setw(3) << jmol << std::flush;
-            current = get_dist_matrix_orthorhombic(coordinates_selected[imol], coordinates_selected[jmol], box);
-            short_contact = (current.first.array() < atomic_van_der_Waals_radius_selected_sum.array()).cast<int>();
+            current = get_dist_squared_matrix_orthorhombic(coordinates_selected[imol], coordinates_selected[jmol], box);
+            short_contact = (current.first.array() < atomic_van_der_Waals_radius_selected_sum_squared.array()).cast<int>();
             num_intermolecule_short_contact_atoms(imol, jmol) = 
             num_intermolecule_short_contact_atoms(jmol, imol) = 
                 short_contact.rowwise().any().sum() + 
