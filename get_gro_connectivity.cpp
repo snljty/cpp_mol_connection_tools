@@ -176,24 +176,25 @@ int main(int argc, const char *argv[]) {
 
     gro_file.get_intermolecule_connectivity_of_selected_part();
 
-    std::cout << "# counts from 1" << std::endl;
-    std::cout << "# natoms    npairs    imol    jmol    nx    ny    nz" << std::endl;
-
+    std::ofstream ofile("short_contact.txt");
+    ofile << "# counts from 1" << std::endl;
+    ofile << "# natoms    npairs    imol    jmol    nx    ny    nz" << std::endl;
     for (int imol = 0; imol < gro_file.nmols; ++ imol) {
-        for (int jmol = 0; jmol < gro_file.nmols; ++ jmol) {
+        for (int jmol = imol + 1; jmol < gro_file.nmols; ++ jmol) {
             if (gro_file.num_intermolecule_short_contact_pairs(imol, jmol)) {
-                std::cout << 
+                ofile << 
                 std::setw(3) << "" << std::setw(3) << gro_file.num_intermolecule_short_contact_atoms(imol, jmol) << 
                 std::setw(7) << "" << std::setw(3) << gro_file.num_intermolecule_short_contact_pairs(imol, jmol) << 
                 std::setw(7) << "" << std::setw(3) << imol + 1 << 
                 std::setw(5) << "" << std::setw(3) << jmol + 1 << 
-                std::setw(4) << "" << std::setw(2) << - static_cast<int>(gro_file.shifts_min[coord_x](imol, jmol)) << 
-                std::setw(4) << "" << std::setw(2) << - static_cast<int>(gro_file.shifts_min[coord_y](imol, jmol)) << 
-                std::setw(4) << "" << std::setw(2) << - static_cast<int>(gro_file.shifts_min[coord_z](imol, jmol)) << 
+                std::setw(4) << "" << std::setw(2) << static_cast<int>(gro_file.shifts_min[coord_x](imol, jmol)) << 
+                std::setw(4) << "" << std::setw(2) << static_cast<int>(gro_file.shifts_min[coord_y](imol, jmol)) << 
+                std::setw(4) << "" << std::setw(2) << static_cast<int>(gro_file.shifts_min[coord_z](imol, jmol)) << 
                 std::endl;
             }
         }
     }
+    ofile.close();
 
     /*
     std::ofstream ofile2("connectivity.txt");
