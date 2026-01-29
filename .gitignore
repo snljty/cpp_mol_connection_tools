@@ -5,3 +5,4 @@ build
 *.obj
 *.exe
 *.txt
+!CMakeLists.txt
