@@ -327,7 +327,7 @@ std::string list_to_indices_str_from_1(const std::vector<int> &nums) {
     a = nums[0];
     b = a;
     // handle second to the one before last
-    for (int i = 1; i < nums.size(); ++ i) {
+    for (size_t i = 1; i < nums.size(); ++ i) {
         if (nums[i] == b + 1) {
             ++ b;
         } else {
@@ -351,7 +351,7 @@ std::string list_to_indices_str_from_1(const std::vector<int> &nums) {
     if (! ret_list.empty()) {
         ret = ret_list[0];
     }
-    for (int i = 1; i < ret_list.size(); ++ i) {
+    for (size_t i = 1; i < ret_list.size(); ++ i) {
         ret += "," + ret_list[i];
     }
     return ret;
@@ -366,7 +366,7 @@ void list_to_indices_str_from_1(const std::vector<int> &nums, std::string &resul
     a = nums[0];
     b = a;
     // handle second to the one before last
-    for (int i = 1; i < nums.size(); ++ i) {
+    for (size_t i = 1; i < nums.size(); ++ i) {
         if (nums[i] == b + 1) {
             ++ b;
         } else {
@@ -389,7 +389,7 @@ void list_to_indices_str_from_1(const std::vector<int> &nums, std::string &resul
     if (! ret_list.empty()) {
         result = ret_list[0];
     }
-    for (int i = 1; i < ret_list.size(); ++ i) {
+    for (size_t i = 1; i < ret_list.size(); ++ i) {
         result += "," + ret_list[i];
     }
 }
@@ -433,7 +433,7 @@ std::pair<Eigen::MatrixXf, Eigen::Vector<char, ncoords> >
     diff.array() += shift_real.array().colwise() * diag.array();
     dist_matrix = diff.colwise().norm(); // Eigen::RowVector, shape (1, coord1.cols() * coord2.cols())
     Eigen::MatrixXf::Index min_dist_pos;
-    float min_dist = dist_matrix.row(0).minCoeff(& min_dist_pos);
+    dist_matrix.row(0).minCoeff(& min_dist_pos);
     dist_matrix.resize(coord1.cols(), coord2.cols());
     Eigen::Vector<char, ncoords> shift_min = shift_real.col(min_dist_pos).cast<char>();
     return std::make_pair(dist_matrix, shift_min);
@@ -456,7 +456,7 @@ std::pair<Eigen::MatrixXf, Eigen::Vector<char, ncoords> >
     diff.array() += shift_real.array().colwise() * diag.array();
     squared_dist_matrix = diff.colwise().squaredNorm(); // Eigen::RowVector, shape (1, coord1.cols() * coord2.cols())
     Eigen::MatrixXf::Index min_dist_pos;
-    float min_dist = squared_dist_matrix.row(0).minCoeff(& min_dist_pos);
+    squared_dist_matrix.row(0).minCoeff(& min_dist_pos);
     squared_dist_matrix.resize(coord1.cols(), coord2.cols());
     Eigen::Vector<char, ncoords> shift_min = shift_real.col(min_dist_pos).cast<char>();
     return std::make_pair(squared_dist_matrix, shift_min);
@@ -479,7 +479,7 @@ void print_box(const Eigen::Matrix3f &box) {
 }
 
 Element_table::Element_table() {
-    for (int i = 0; i < elements_names.size(); ++ i) {
+    for (size_t i = 0; i < elements_names.size(); ++ i) {
         table.insert({elements_names[i], i});
     }
 }
@@ -583,7 +583,7 @@ void MoleculesBox::read_gro(const std::string &ifilename, int nmols) {
     ifile.seekg(0, std::ios::beg);
     getline_check(ifile, line); // title
     getline_check(ifile, line); // natoms
-    if (elements.size() != natoms_per_mol) {
+    if (elements.size() != static_cast<size_t>(natoms_per_mol)) {
         elements.resize(natoms_per_mol);
         atomic_indices.resize(natoms_per_mol);
         atomic_van_der_Waals_radius.resize(natoms_per_mol);
@@ -694,7 +694,7 @@ void MoleculesBox::set_selection(const std::vector<int> &selection_list) {
 void MoleculesBox::set_selection_internal() {
     natoms_selected = selection.size();
 
-    if (atomic_indices_selected.size() != natoms_selected) {
+    if (atomic_indices_selected.size() != static_cast<size_t>(natoms_selected)) {
         atomic_indices_selected.resize(natoms_selected);
         atomic_van_der_Waals_radius_selected.resize(natoms_selected);
         atomic_van_der_Waals_radius_selected_sum.resize(natoms_selected, natoms_selected);
@@ -860,19 +860,19 @@ void MoleculesBox::get_backbone(){
     natoms_per_trimmed_mol = backbone.size() + natoms_truncated_methyl_total;
     monomer_methyl.resize(natoms_per_trimmed_mol);
     dimer_methyl.resize(2 * natoms_per_trimmed_mol);
-    for (int i = 0; i < backbone.size(); ++ i) {
+    for (size_t i = 0; i < backbone.size(); ++ i) {
         dimer_methyl.elements[i + natoms_per_trimmed_mol] = 
         dimer_methyl.elements[i] = 
         monomer_methyl.elements[i] = elements[backbone[i]];
     }
     int iatom_in_methyl = 0;
-    for (int imethyl = 0; imethyl < alkyl_connection_site.size(); ++ imethyl) {
+    for (size_t imethyl = 0; imethyl < alkyl_connection_site.size(); ++ imethyl) {
         int iatom = alkyl_connection_site[imethyl];
         dimer_methyl.elements[backbone.size() + iatom_in_methyl + natoms_per_trimmed_mol] = 
         dimer_methyl.elements[backbone.size() + iatom_in_methyl] = 
         monomer_methyl.elements[backbone.size() + iatom_in_methyl] = elements[iatom];
         ++ iatom_in_methyl;
-        for (int i = 0; i < alkyl_connection_site_connected_alkyl[imethyl].size(); ++ i) {
+        for (size_t i = 0; i < alkyl_connection_site_connected_alkyl[imethyl].size(); ++ i) {
             dimer_methyl.elements[backbone.size() + iatom_in_methyl + i + natoms_per_trimmed_mol] = 
             dimer_methyl.elements[backbone.size() + iatom_in_methyl + i] = 
             monomer_methyl.elements[backbone.size() + iatom_in_methyl + i] = "H";
@@ -891,7 +891,7 @@ void MoleculesBox::get_backbone_without_hydrogen() {
 
     monomer_backbone_no_hydrogen.resize(backbone_noH.size());
     dimer_backbone_no_hydrogen.resize(2 * backbone_noH.size());
-    for (int i = 0; i < backbone_noH.size(); ++ i) {
+    for (size_t i = 0; i < backbone_noH.size(); ++ i) {
         dimer_backbone_no_hydrogen.elements[backbone_noH.size() + i] = 
         dimer_backbone_no_hydrogen.elements[i] = 
         monomer_backbone_no_hydrogen.elements[i] = elements[backbone_noH[i]];
@@ -935,15 +935,15 @@ void MoleculesBox::generate_monomer(int imol) {
 
     monomer.coordinates = coordinates[imol];
 
-    for (int i = 0; i < backbone.size(); ++ i) {
+    for (size_t i = 0; i < backbone.size(); ++ i) {
         monomer_methyl.coordinates.col(i) = coordinates[imol].col(backbone[i]);
     }
     int iatom_in_methyl = 0;
-    for (int imethyl = 0; imethyl < alkyl_connection_site.size(); ++ imethyl) {
+    for (size_t imethyl = 0; imethyl < alkyl_connection_site.size(); ++ imethyl) {
         int iatom = alkyl_connection_site[imethyl];
         monomer_methyl.coordinates.col(backbone.size() + iatom_in_methyl) = coordinates[imol].col(iatom);
         ++ iatom_in_methyl;
-        for (int i = 0; i < alkyl_connection_site_connected_alkyl[imethyl].size(); ++ i) {
+        for (size_t i = 0; i < alkyl_connection_site_connected_alkyl[imethyl].size(); ++ i) {
             int jatom = alkyl_connection_site_connected_alkyl[imethyl][i];
             bond_vec = coordinates[imol].col(jatom) - coordinates[imol].col(iatom);
             bond_vec /= bond_vec.norm() / C_H_bond_len;
@@ -952,7 +952,7 @@ void MoleculesBox::generate_monomer(int imol) {
         iatom_in_methyl += alkyl_connection_site_connected_alkyl[imethyl].size();
     }
 
-    for (int i = 0; i < backbone_noH.size(); ++ i) {
+    for (size_t i = 0; i < backbone_noH.size(); ++ i) {
         monomer_backbone_no_hydrogen.coordinates.col(i) = coordinates[imol].col(backbone_noH[i]);
     }
 }
@@ -967,17 +967,17 @@ void MoleculesBox::generate_dimer(int imol, int jmol, char shift_a, char shift_b
     if (shift_b) dimer.coordinates.block(0, natoms_per_mol, ncoords, natoms_per_mol).colwise() -= box.col(1) * shift_b;
     if (shift_c) dimer.coordinates.block(0, natoms_per_mol, ncoords, natoms_per_mol).colwise() -= box.col(2) * shift_c;
 
-    for (int i = 0; i < backbone.size(); ++ i) {
+    for (size_t i = 0; i < backbone.size(); ++ i) {
         dimer_methyl.coordinates.col(i) = coordinates[imol].col(backbone[i]);
         dimer_methyl.coordinates.col(i + natoms_per_trimmed_mol) = coordinates[jmol].col(backbone[i]);
     }
     int iatom_in_methyl = 0;
-    for (int imethyl = 0; imethyl < alkyl_connection_site.size(); ++ imethyl) {
+    for (size_t imethyl = 0; imethyl < alkyl_connection_site.size(); ++ imethyl) {
         int iatom = alkyl_connection_site[imethyl];
         dimer_methyl.coordinates.col(backbone.size() + iatom_in_methyl) = coordinates[imol].col(iatom);
         dimer_methyl.coordinates.col(backbone.size() + iatom_in_methyl + natoms_per_trimmed_mol) = coordinates[jmol].col(iatom);
         ++ iatom_in_methyl;
-        for (int i = 0; i < alkyl_connection_site_connected_alkyl[imethyl].size(); ++ i) {
+        for (size_t i = 0; i < alkyl_connection_site_connected_alkyl[imethyl].size(); ++ i) {
             int jatom = alkyl_connection_site_connected_alkyl[imethyl][i];
             bond_vec = coordinates[imol].col(jatom) - coordinates[imol].col(iatom);
             bond_vec /= bond_vec.norm() / C_H_bond_len;
@@ -992,7 +992,7 @@ void MoleculesBox::generate_dimer(int imol, int jmol, char shift_a, char shift_b
     if (shift_b) dimer_methyl.coordinates.block(0, natoms_per_trimmed_mol, ncoords, natoms_per_trimmed_mol).colwise() -= box.col(1) * shift_b;
     if (shift_c) dimer_methyl.coordinates.block(0, natoms_per_trimmed_mol, ncoords, natoms_per_trimmed_mol).colwise() -= box.col(2) * shift_c;
 
-    for (int i = 0; i < backbone_noH.size(); ++ i) {
+    for (size_t i = 0; i < backbone_noH.size(); ++ i) {
         dimer_backbone_no_hydrogen.coordinates.col(i) = coordinates[imol].col(backbone_noH[i]);
         dimer_backbone_no_hydrogen.coordinates.col(i + backbone_noH.size()) = coordinates[jmol].col(backbone_noH[i]);
     }
