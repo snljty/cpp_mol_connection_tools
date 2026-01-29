@@ -4,6 +4,9 @@
 // matrix[i, j] for point i to j where i is row and j is column.
 #include <Eigen/Dense>
 
+#include <fmt/format.h>
+#include <fmt/os.h>
+
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -12,6 +15,7 @@
 #include <unordered_map>
 #include <regex>
 #include <algorithm>
+#include <iterator>
 #include <tuple>
 #include <array>
 #include <stdexcept>
@@ -115,7 +119,17 @@ public:
     std::unordered_map<std::string, int> table;
 };
 
-class Gro_file {
+class Molecule {
+public:
+    int natoms;
+    std::vector<std::string> elements;
+    Eigen::MatrixXf coordinates;
+
+    void resize(int natoms);
+    void write_gjf(const std::string &ofilename);
+};
+
+class MoleculesBox {
 public:
     Element_table element_table;
     int natoms;
@@ -141,19 +155,36 @@ public:
     Eigen::MatrixXi num_intermolecule_short_contact_atoms;
     Eigen::MatrixXi num_intermolecule_short_contact_pairs;
     std::array<Eigen::Matrix<char, Eigen::Dynamic, Eigen::Dynamic>, ncoords> shifts_min;
+    std::vector<int> backbone;
+    std::vector<int> backbone_noH;
+    Molecule monomer;
+    Molecule monomer_methyl;
+    Molecule monomer_backbone_no_hydrogen;
+    Molecule dimer;
+    Molecule dimer_methyl;
+    Molecule dimer_backbone_no_hydrogen;
+    std::vector<int> alkyl_connection_site;
+    std::vector<std::vector<int> > alkyl_connection_site_connected_alkyl;
+    int natoms_per_trimmed_mol;
+    int natoms_truncated_methyl_total;
+    int index_of_a_nice_molecule = -1;
 
-    Gro_file() = default;
-    Gro_file(const std::string &ifilename, int nmols=0);
-    ~Gro_file() = default;
+    // MoleculesBox() = default;
+    MoleculesBox(const std::string &ifilename, int nmols=0);
+    // ~MoleculesBox() = default;
     void read_gro(const std::string &ifilename, int nmols=0);
     void set_selection(const std::string &selection_str);
     void set_selection(const std::vector<int> &selection_list);
     void set_selection_internal();
     void get_intramolecule_connectivity(int imol=0, float scaler_tol=1.15f);
     void write_mol_gjf(const std::string &ofilename, int imol=0, bool write_connectivity=false) const;
-    std::vector<int> get_backbone() const;
-    std::vector<int> get_backbone_without_hydrogen() const;
+    void get_backbone();
+    void get_backbone_without_hydrogen();
     void get_intermolecule_connectivity_of_selected_part();
+    void get_a_nice_molecule();
+    void connection_search(std::vector<unsigned char> &visited, int i);
+    void generate_monomer(int imol);
+    void generate_dimer(int imol, int jmol);
 
 };
 
@@ -161,9 +192,9 @@ int main(int argc, const char *argv[]) {
     /*
     std::ifstream ifile("elements.txt");
     if (! ifile) {
-        std::ofstream ofile("elements.txt");
-        for (int i = 0; i < gro_file.natoms_per_mol; ++ i) {
-            ofile << gro_file.elements[i] << std::endl;
+        fmt::ostream ofile(fmt::output_file("elements.txt"));
+        for (int i = 0; i < molecules_box.natoms_per_mol; ++ i) {
+            ofile.print("{:s}\n", molecules_box.elements[i]);
         }
         ofile.close();
     } else {
@@ -171,60 +202,64 @@ int main(int argc, const char *argv[]) {
     }
     */
 
-    Gro_file gro_file("../frame0.gro");
+    if (argc - 1 != 2) {
+        fmt::print("Usage: {:s} prefix frame_index\n", argv[0]);
+        fmt::print("Will handle $prefix$frame.gro\n");
+        return 0;
+    }
 
-    gro_file.get_intramolecule_connectivity();
-    // gro_file.write_mol_gjf("test.gjf", 0, true);
-    std::vector<int> backbone_noH = gro_file.get_backbone_without_hydrogen();
-    // std::cout << list_to_indices_str_from_1(backbone_noH) << std::endl;
-    gro_file.set_selection(backbone_noH);
+    int iframe = -1;
+    iframe = std::atoi(argv[2]);
+    if (iframe < 0) {
+        throw std::invalid_argument("Cannot read frame_index.");
+    }
 
-    gro_file.get_intermolecule_connectivity_of_selected_part();
+    std::string ifilename = fmt::format("{:s}{:d}.gro", argv[1], iframe);
 
-    std::ofstream ofile("short_contact.txt");
-    ofile << "# counts from 1" << std::endl;
-    ofile << "# natoms    npairs    imol    jmol    nx    ny    nz" << std::endl;
-    for (int imol = 0; imol < gro_file.nmols; ++ imol) {
-        for (int jmol = imol + 1; jmol < gro_file.nmols; ++ jmol) {
-            if (gro_file.num_intermolecule_short_contact_pairs(imol, jmol)) {
-                ofile << 
-                std::setw(3) << "" << std::setw(3) << gro_file.num_intermolecule_short_contact_atoms(imol, jmol) << 
-                std::setw(7) << "" << std::setw(3) << gro_file.num_intermolecule_short_contact_pairs(imol, jmol) << 
-                std::setw(7) << "" << std::setw(3) << imol + 1 << 
-                std::setw(5) << "" << std::setw(3) << jmol + 1 << 
-                std::setw(4) << "" << std::setw(2) << static_cast<int>(gro_file.shifts_min[coord_x](imol, jmol)) << 
-                std::setw(4) << "" << std::setw(2) << static_cast<int>(gro_file.shifts_min[coord_y](imol, jmol)) << 
-                std::setw(4) << "" << std::setw(2) << static_cast<int>(gro_file.shifts_min[coord_z](imol, jmol)) << 
-                std::endl;
+    MoleculesBox molecules_box(ifilename);
+
+    molecules_box.get_a_nice_molecule();
+    molecules_box.get_intramolecule_connectivity(molecules_box.index_of_a_nice_molecule);
+    molecules_box.get_backbone_without_hydrogen();
+    molecules_box.set_selection(molecules_box.backbone_noH);
+
+    std::string ofilename = fmt::format("frame_{:03d}_short_contact.txt", iframe);
+
+    molecules_box.generate_monomer(3);
+    molecules_box.monomer.write_gjf("monomer.gjf");
+    molecules_box.monomer_methyl.write_gjf("monomer_trimmed.gjf");
+    molecules_box.monomer_backbone_no_hydrogen.write_gjf("monomer_bb_noH.gjf");
+
+    molecules_box.generate_dimer(0, 54);
+    molecules_box.dimer.write_gjf("dimer.gjf");
+    molecules_box.dimer_methyl.write_gjf("dimer_trimmed.gjf");
+    molecules_box.dimer_backbone_no_hydrogen.write_gjf("dimer_bb_noH.gjf");
+
+
+
+    /*
+    molecules_box.get_intermolecule_connectivity_of_selected_part();
+
+    fmt::ostream ofile(fmt::output_file("short_contact.txt"));
+    ofile.print("# counts from 1\n");
+    ofile.print("# natoms    npairs    imol    jmol    nx    ny    nz\n");
+    for (int imol = 0; imol < molecules_box.nmols; ++ imol) {
+        for (int jmol = imol + 1; jmol < molecules_box.nmols; ++ jmol) {
+            if (molecules_box.num_intermolecule_short_contact_pairs(imol, jmol)) {
+                ofile.print("{0:3s}{1:3d}{0:7s}{2:3d}{0:7s}{3:3d}{0:5s}{4:3d}{0:4s}{5:2d}{0:4s}{6:2d}{0:4s}{7:2d}\n", 
+                    "", 
+                    molecules_box.num_intermolecule_short_contact_atoms(imol, jmol), 
+                    molecules_box.num_intermolecule_short_contact_pairs(imol, jmol), 
+                    imol + 1, 
+                    jmol + 1, 
+                    static_cast<int>(molecules_box.shifts_min[coord_x](imol, jmol)), 
+                    static_cast<int>(molecules_box.shifts_min[coord_y](imol, jmol)), 
+                    static_cast<int>(molecules_box.shifts_min[coord_z](imol, jmol))
+                );
             }
         }
     }
     ofile.close();
-
-    /*
-    std::ofstream ofile2("connectivity.txt");
-    for (int i = 0; i < gro_file.natoms_per_mol; ++ i) {
-        for (int j = 0; j < gro_file.natoms_per_mol; ++ j) {
-            if (j) ofile2 << ' ';
-            ofile2 << static_cast<int>(gro_file.intramolecule_connectivity(i, j));
-        }
-        ofile2 << std::endl;
-    }
-    ofile2.close();
-    */
-
-    // gro_file.write_mol_gjf("test.gjf", 0, true);
-
-    /*
-    std::cout << std::fixed << std::setprecision(4);
-    for (int i = 0; i < ncoords; ++ i) {
-        for (int j = 0; j < ncoords; ++ j) {
-            if (j) std::cout << std::setw(4) << "";
-            std::cout << std::setw(8) << gro_file.box(i, j);
-        }
-        std::cout << std::endl;
-    }
-    std::cout << std::defaultfloat;
     */
 
     return 0;
@@ -434,11 +469,13 @@ void print_box(const Eigen::Matrix3f &box) {
         throw std::invalid_argument("box must be " + std::to_string(ncoords) + " by " + std::to_string(ncoords) + ".");
     }
     */
-    std::cout << std::fixed << std::setprecision(8);
     for (int i = 0; i < ncoords; ++ i) {
-        std::cout   << std::setw(11) << box(coord_x, i) << 
-            "    "  << std::setw(11) << box(coord_y, i) << 
-            "    "  << std::setw(11) << box(coord_z, i) << std::endl;
+        // "{:12.8f}    {:12.8f}    {:12.8f}\n"
+        fmt::print("{:8.4f}    {:8.4f}    {:8.4f}\n", 
+            box(coord_x, i), 
+            box(coord_y, i), 
+            box(coord_z, i)
+        );
     }
 }
 
@@ -448,11 +485,43 @@ Element_table::Element_table() {
     }
 }
 
-Gro_file::Gro_file(const std::string &ifilename, int nmols) : element_table() {
+void Molecule::resize(int natoms) {
+    this->natoms = natoms;
+    elements.resize(natoms);
+    coordinates.resize(ncoords, natoms);
+}
+
+void Molecule::write_gjf(const std::string &ofilename) {
+    size_t pos = ofilename.rfind('.');
+    if (pos == std::string::npos || ofilename.substr(pos, ofilename.length() - pos) != ".gjf") {
+        throw std::invalid_argument("Suffix of a gjf file must be \".gjf\".");
+    }
+
+    fmt::ostream ofile(fmt::output_file(ofilename));
+
+    ofile.print("%chk={:s}.chk\n", ofilename.substr(0, pos));
+    ofile.print("#P B3LYP/6-31G** EmpiricalDispersion=GD3BJ\n");
+    ofile.print("\n{:s}\n\n", ofilename.substr(0, pos));
+    const int charge = 0, multiplicity = 1;
+    ofile.print(" {:d} {:d}\n", charge, multiplicity);
+    for (int iatom = 0; iatom < natoms; ++ iatom) {
+        // " {:<2s}    {:13.8f}    {:13.8f}    {:13.8f}\n"
+        ofile.print(" {:<2s}    {:7.2f}    {:7.2f}    {:7.2f}\n", 
+            elements[iatom], 
+            coordinates(coord_x, iatom), 
+            coordinates(coord_y, iatom), 
+            coordinates(coord_z, iatom)
+        );
+    }
+    ofile.print("\n");
+    ofile.close();
+}
+
+MoleculesBox::MoleculesBox(const std::string &ifilename, int nmols) : element_table() {
     read_gro(ifilename, nmols);
 }
 
-void Gro_file::read_gro(const std::string &ifilename, int nmols) {
+void MoleculesBox::read_gro(const std::string &ifilename, int nmols) {
     this->nmols = nmols;
     // check ifilename
     size_t pos = ifilename.rfind('.');
@@ -605,19 +674,25 @@ void Gro_file::read_gro(const std::string &ifilename, int nmols) {
     }
     box = box_d.cast<float>();
     ifile.close();
+
+    monomer.resize(natoms_per_mol);
+    dimer.resize(2 * natoms_per_mol);
+    monomer.elements = elements;
+    std::copy(elements.begin(), elements.end(), dimer.elements.begin());
+    std::copy(elements.begin(), elements.end(), std::next(dimer.elements.begin(), elements.size()));
 }
 
-void Gro_file::set_selection(const std::string &selection_str) {
+void MoleculesBox::set_selection(const std::string &selection_str) {
     indices_str_to_list_from_0(selection_str, selection);
     set_selection_internal();
 }
 
-void Gro_file::set_selection(const std::vector<int> &selection_list) {
+void MoleculesBox::set_selection(const std::vector<int> &selection_list) {
     selection = selection_list;
     set_selection_internal();
 }
 
-void Gro_file::set_selection_internal() {
+void MoleculesBox::set_selection_internal() {
     natoms_selected = selection.size();
 
     if (atomic_indices_selected.size() != natoms_selected) {
@@ -644,15 +719,16 @@ void Gro_file::set_selection_internal() {
     atomic_van_der_Waals_radius_selected_sum_squared = atomic_van_der_Waals_radius_selected_sum.array().square();
 }
 
-void Gro_file::get_intramolecule_connectivity(int imol, float scaler_tol) {
+void MoleculesBox::get_intramolecule_connectivity(int imol, float scaler_tol) {
     // get distance matrix, no PBC considered
-    Eigen::MatrixXf dist_matrix = get_dist_matrix_no_box(coordinates[imol], coordinates[imol]);
+    static Eigen::MatrixXf dist_matrix_intra;
+    dist_matrix_intra = get_dist_matrix_no_box(coordinates[imol], coordinates[imol]);
 
-    intramolecule_connectivity = (dist_matrix.array() <= (atomic_covalence_radius_sum * scaler_tol).array()).cast<unsigned char>();
+    intramolecule_connectivity = (dist_matrix_intra.array() <= (atomic_covalence_radius_sum * scaler_tol).array()).cast<unsigned char>();
     intramolecule_connectivity.diagonal().setZero();
 }
 
-void Gro_file::get_intermolecule_connectivity_of_selected_part() {
+void MoleculesBox::get_intermolecule_connectivity_of_selected_part() {
     static std::pair<Eigen::MatrixXf, Eigen::Vector<char, ncoords> > current;
     static Eigen::MatrixXi short_contact;
 
@@ -683,47 +759,51 @@ void Gro_file::get_intermolecule_connectivity_of_selected_part() {
     }
 }
 
-void Gro_file::write_mol_gjf(const std::string &ofilename, int imol, bool write_connectivity) const {
+void MoleculesBox::write_mol_gjf(const std::string &ofilename, int imol, bool write_connectivity) const {
     size_t pos = ofilename.rfind('.');
     if (pos == std::string::npos || ofilename.substr(pos, ofilename.length() - pos) != ".gjf") {
         throw std::invalid_argument("Suffix of a gjf file must be \".gjf\".");
     }
 
-    std::ofstream ofile(ofilename);
-    ofile << "%%chk=" << ofilename.substr(0, pos) << ".chk" << std::endl;
+    fmt::ostream ofile(fmt::output_file(ofilename));
+
+    ofile.print("%chk={:s}.chk\n", ofilename.substr(0, pos));
     if (write_connectivity) {
-        ofile << "#P B3LYP/6-31G** EmpiricalDispersion=GD3BJ Geom=Connectivity" << std::endl;
+        ofile.print("#P B3LYP/6-31G** EmpiricalDispersion=GD3BJ Geom=Connectivity\n");
     } else {
-        ofile << "#P B3LYP/6-31G** EmpiricalDispersion=GD3BJ" << std::endl;
+        ofile.print("#P B3LYP/6-31G** EmpiricalDispersion=GD3BJ\n");
     }
-    ofile << std::endl << "molecule " << imol + 1 << std::endl << std::endl;
+    ofile.print("\nmolecule {:d}\n\n", imol + 1);
     const int charge = 0, multiplicity = 1;
-    ofile << ' ' << charge << ' ' << multiplicity << std::endl;
-    ofile << std::fixed << std::setprecision(5);
+    ofile.print(" {:d} {:d}\n", charge, multiplicity);
     for (int iatom = 0; iatom < natoms_per_mol; ++ iatom) {
-        ofile << ' ' << std::left << std::setw(2) << elements[iatom] << 
-            "    " << std::setw(10) << coordinates[imol](coord_x, iatom) << 
-            "    " << std::setw(10) << coordinates[imol](coord_y, iatom) << 
-            "    " << std::setw(10) << coordinates[imol](coord_z, iatom) << std::endl;
+        // " {:<2s}    {:13.8f}    {:13.8f}    {:13.8f}\n"
+        ofile.print(" {:<2s}    {:7.2f}    {:7.2f}    {:7.2f}\n", 
+            elements[iatom], 
+            coordinates[imol](coord_x, iatom), 
+            coordinates[imol](coord_y, iatom), 
+            coordinates[imol](coord_z, iatom)
+        );
     }
-    ofile << std::endl;
+    ofile.print("\n");
+
     if (write_connectivity){
         for (int iatom = 0; iatom < natoms_per_mol; ++ iatom) {
-            ofile << iatom + 1;
+            ofile.print("{:d}", iatom + 1);
             for (int jatom = iatom + 1; jatom < natoms_per_mol; ++ jatom) {
                 if (intramolecule_connectivity(iatom, jatom)) {
-                    ofile << ' ' << jatom + 1 << ' ' << "1.";
+                    ofile.print(" {:d} 1.", jatom + 1);
                 }
             }
-            ofile << std::endl;
+            ofile.print("\n");
         }
-        ofile << std::endl;
+        ofile.print("\n");
     }
-    ofile << std::defaultfloat;
+
     ofile.close();
 }
 
-std::vector<int> Gro_file::get_backbone() const {
+void MoleculesBox::get_backbone(){
     Eigen::Vector<unsigned char, Eigen::Dynamic> num_intramolecule_connections = intramolecule_connectivity.rowwise().sum();
     // get alkyl
     std::vector<int> alkyl;
@@ -743,19 +823,166 @@ std::vector<int> Gro_file::get_backbone() const {
     }
     std::sort(alkyl.begin(), alkyl.end());
     // get backbone
-    std::vector<int> backbone;
+    backbone.clear();
     for (int iatom = 0; iatom < natoms_per_mol; ++ iatom) {
         if (! in_alkyl[iatom]) backbone.push_back(iatom);
     }
-    return backbone;
+
+    // get connection site of alkyl, and atoms in alkyl that connects to them.
+    alkyl_connection_site.clear();
+    alkyl_connection_site_connected_alkyl.clear();
+    natoms_truncated_methyl_total = 0;
+    for (int iatom = 0; iatom < natoms_per_mol; ++ iatom) {
+        if (in_alkyl[iatom]) {
+            bool being_alkyl_connection_site = false;
+            for (int jatom = 0; jatom < natoms_per_mol; ++ jatom) {
+                if (! in_alkyl[jatom] && intramolecule_connectivity(iatom, jatom)) {
+                    being_alkyl_connection_site = true;
+                }
+            }
+            if (being_alkyl_connection_site) {
+                alkyl_connection_site.push_back(iatom);
+                alkyl_connection_site_connected_alkyl.emplace_back();
+                for (int jatom = 0; jatom < natoms_per_mol; ++ jatom) {
+                    if (in_alkyl[jatom] && intramolecule_connectivity(iatom, jatom)) {
+                        alkyl_connection_site_connected_alkyl.back().push_back(jatom);
+                    }
+                }
+                natoms_truncated_methyl_total += 1 + alkyl_connection_site_connected_alkyl.back().size();
+            }
+        }
+    }
+    natoms_per_trimmed_mol = backbone.size() + natoms_truncated_methyl_total;
+    monomer_methyl.resize(natoms_per_trimmed_mol);
+    dimer_methyl.resize(2 * natoms_per_trimmed_mol);
+    for (int i = 0; i < backbone.size(); ++ i) {
+        dimer_methyl.elements[i + natoms_per_trimmed_mol] = 
+        dimer_methyl.elements[i] = 
+        monomer_methyl.elements[i] = elements[backbone[i]];
+    }
+    int iatom_in_methyl = 0;
+    for (int imethyl = 0; imethyl < alkyl_connection_site.size(); ++ imethyl) {
+        int iatom = alkyl_connection_site[imethyl];
+        dimer_methyl.elements[backbone.size() + iatom_in_methyl + natoms_per_trimmed_mol] = 
+        dimer_methyl.elements[backbone.size() + iatom_in_methyl] = 
+        monomer_methyl.elements[backbone.size() + iatom_in_methyl] = elements[iatom];
+        ++ iatom_in_methyl;
+        for (int i = 0; i < alkyl_connection_site_connected_alkyl[imethyl].size(); ++ i) {
+            dimer_methyl.elements[backbone.size() + iatom_in_methyl + i + natoms_per_trimmed_mol] = 
+            dimer_methyl.elements[backbone.size() + iatom_in_methyl + i] = 
+            monomer_methyl.elements[backbone.size() + iatom_in_methyl + i] = "H";
+        }
+        iatom_in_methyl += alkyl_connection_site_connected_alkyl[imethyl].size();
+    }
 }
 
-std::vector<int> Gro_file::get_backbone_without_hydrogen() const {
-    std::vector<int> backbone = get_backbone();
-    std::vector<int> backbone_noH;
+void MoleculesBox::get_backbone_without_hydrogen() {
+    if (backbone.size() == 0) get_backbone();
+    backbone_noH.clear();
     backbone_noH.reserve(backbone.size());
     for (int iatom : backbone) {
         if (elements[iatom] != "H") backbone_noH.push_back(iatom);
     }
-    return backbone_noH;
+
+    monomer_backbone_no_hydrogen.resize(backbone_noH.size());
+    dimer_backbone_no_hydrogen.resize(2 * backbone_noH.size());
+    for (int i = 0; i < backbone_noH.size(); ++ i) {
+        dimer_backbone_no_hydrogen.elements[backbone_noH.size() + i] = 
+        dimer_backbone_no_hydrogen.elements[i] = 
+        monomer_backbone_no_hydrogen.elements[i] = elements[backbone_noH[i]];
+    }
+}
+
+void MoleculesBox::get_a_nice_molecule() {
+    index_of_a_nice_molecule = -1;
+    std::vector<unsigned char> visited(natoms_per_mol);
+    bool all_connected;
+    for (int imol = 0; imol < nmols; ++ imol) {
+        std::fill(visited.begin(), visited.end(), 0);
+        get_intramolecule_connectivity(imol);
+        connection_search(visited, 0);
+        all_connected = true;
+        for (int i = 0; i < natoms_per_mol; ++ i) {
+            if (! visited[i]) all_connected = false;
+        }
+        if (all_connected) {
+            index_of_a_nice_molecule = imol;
+            break;
+        }
+    }
+    if (index_of_a_nice_molecule < 0) {
+        throw std::runtime_error("Cannot find even one whole molecule.");
+    }
+}
+
+void MoleculesBox::connection_search(std::vector<unsigned char> &visited, int i) {
+    visited[i] = 1;
+    for (int j = 0; j < natoms_per_mol; ++ j) {
+        if (! visited[j] && intramolecule_connectivity(i, j)) {
+            connection_search(visited, j);
+        }
+    }
+}
+
+void MoleculesBox::generate_monomer(int imol) {
+    Eigen::Vector3f bond_vec;
+    const float C_H_bond_len = 1.09105f; // sp3 C-H length in ethane at B3LYP-D3(BJ)/def2-TZVPP
+
+    monomer.coordinates = coordinates[imol];
+
+    for (int i = 0; i < backbone.size(); ++ i) {
+        monomer_methyl.coordinates.col(i) = coordinates[imol].col(backbone[i]);
+    }
+    int iatom_in_methyl = 0;
+    for (int imethyl = 0; imethyl < alkyl_connection_site.size(); ++ imethyl) {
+        int iatom = alkyl_connection_site[imethyl];
+        monomer_methyl.coordinates.col(backbone.size() + iatom_in_methyl) = coordinates[imol].col(iatom);
+        ++ iatom_in_methyl;
+        for (int i = 0; i < alkyl_connection_site_connected_alkyl[imethyl].size(); ++ i) {
+            int jatom = alkyl_connection_site_connected_alkyl[imethyl][i];
+            bond_vec = coordinates[imol].col(jatom) - coordinates[imol].col(iatom);
+            bond_vec /= bond_vec.norm() / C_H_bond_len;
+            monomer_methyl.coordinates.col(backbone.size() + iatom_in_methyl + i) = coordinates[imol].col(iatom) + bond_vec;
+        }
+        iatom_in_methyl += alkyl_connection_site_connected_alkyl[imethyl].size();
+    }
+
+    for (int i = 0; i < backbone_noH.size(); ++ i) {
+        monomer_backbone_no_hydrogen.coordinates.col(i) = coordinates[imol].col(backbone_noH[i]);
+    }
+}
+
+void MoleculesBox::generate_dimer(int imol, int jmol) {
+    Eigen::Vector3f bond_vec;
+    const float C_H_bond_len = 1.09105f; // sp3 C-H length in ethane at B3LYP-D3(BJ)/def2-TZVPP
+
+    dimer.coordinates.block(0, 0, ncoords, natoms_per_mol) = coordinates[imol];
+    dimer.coordinates.block(0, natoms_per_mol, ncoords, natoms_per_mol) = coordinates[jmol];
+
+    for (int i = 0; i < backbone.size(); ++ i) {
+        dimer_methyl.coordinates.col(i) = coordinates[imol].col(backbone[i]);
+        dimer_methyl.coordinates.col(i + natoms_per_trimmed_mol) = coordinates[jmol].col(backbone[i]);
+    }
+    int iatom_in_methyl = 0;
+    for (int imethyl = 0; imethyl < alkyl_connection_site.size(); ++ imethyl) {
+        int iatom = alkyl_connection_site[imethyl];
+        dimer_methyl.coordinates.col(backbone.size() + iatom_in_methyl) = coordinates[imol].col(iatom);
+        dimer_methyl.coordinates.col(backbone.size() + iatom_in_methyl + natoms_per_trimmed_mol) = coordinates[jmol].col(iatom);
+        ++ iatom_in_methyl;
+        for (int i = 0; i < alkyl_connection_site_connected_alkyl[imethyl].size(); ++ i) {
+            int jatom = alkyl_connection_site_connected_alkyl[imethyl][i];
+            bond_vec = coordinates[imol].col(jatom) - coordinates[imol].col(iatom);
+            bond_vec /= bond_vec.norm() / C_H_bond_len;
+            dimer_methyl.coordinates.col(backbone.size() + iatom_in_methyl + i) = coordinates[imol].col(iatom) + bond_vec;
+            bond_vec = coordinates[jmol].col(jatom) - coordinates[jmol].col(iatom);
+            bond_vec /= bond_vec.norm() / C_H_bond_len;
+            dimer_methyl.coordinates.col(backbone.size() + iatom_in_methyl + i + natoms_per_trimmed_mol) = coordinates[jmol].col(iatom) + bond_vec;
+        }
+        iatom_in_methyl += alkyl_connection_site_connected_alkyl[imethyl].size();
+    }
+
+    for (int i = 0; i < backbone_noH.size(); ++ i) {
+        dimer_backbone_no_hydrogen.coordinates.col(i) = coordinates[imol].col(backbone_noH[i]);
+        dimer_backbone_no_hydrogen.coordinates.col(i + backbone_noH.size()) = coordinates[jmol].col(backbone_noH[i]);
+    }
 }
