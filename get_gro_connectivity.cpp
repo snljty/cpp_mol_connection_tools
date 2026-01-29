@@ -20,6 +20,7 @@
 #include <array>
 #include <stdexcept>
 #include <iomanip>
+#include <cstdio>
 
 // parallel?
 // #pragma omp parallel for collapse(2)
@@ -184,26 +185,13 @@ public:
     void get_a_nice_molecule();
     void connection_search(std::vector<unsigned char> &visited, int i);
     void generate_monomer(int imol);
-    void generate_dimer(int imol, int jmol);
+    void generate_dimer(int imol, int jmol, char shift_a=0, char shift_b=0, char shift_c=0);
 
 };
 
 int main(int argc, const char *argv[]) {
-    /*
-    std::ifstream ifile("elements.txt");
-    if (! ifile) {
-        fmt::ostream ofile(fmt::output_file("elements.txt"));
-        for (int i = 0; i < molecules_box.natoms_per_mol; ++ i) {
-            ofile.print("{:s}\n", molecules_box.elements[i]);
-        }
-        ofile.close();
-    } else {
-        ifile.close();
-    }
-    */
-
-    if (argc - 1 != 2) {
-        fmt::print("Usage: {:s} prefix frame_index\n", argv[0]);
+    if (argc - 1 < 2 || argc - 1 > 3) {
+        fmt::print("Usage: {:s} prefix frame_index [npairs_output_tol]\n", argv[0]);
         fmt::print("Will handle $prefix$frame.gro\n");
         return 0;
     }
@@ -214,6 +202,13 @@ int main(int argc, const char *argv[]) {
         throw std::invalid_argument("Cannot read frame_index.");
     }
 
+    const int npairs_tol_def = 8;
+    int npairs_tol = -1;
+    if (argc - 1 == 3) {
+        npairs_tol = std::atoi(argv[3]);
+    }
+    if (npairs_tol < 0) npairs_tol = npairs_tol_def;
+
     std::string ifilename = fmt::format("{:s}{:d}.gro", argv[1], iframe);
 
     MoleculesBox molecules_box(ifilename);
@@ -223,28 +218,32 @@ int main(int argc, const char *argv[]) {
     molecules_box.get_backbone_without_hydrogen();
     molecules_box.set_selection(molecules_box.backbone_noH);
 
-    std::string ofilename = fmt::format("frame_{:03d}_short_contact.txt", iframe);
+    for (int imonomer = 0; imonomer < molecules_box.nmols; ++ imonomer) {
+        molecules_box.generate_monomer(imonomer);
+        molecules_box.monomer.write_gjf(fmt::format("frame_{:03d}_monomer_{:03d}.gjf", iframe, imonomer + 1));
+        molecules_box.monomer_methyl.write_gjf(fmt::format("frame_{:03d}_monomer_trimmed_{:03d}.gjf", iframe, imonomer + 1));
+        molecules_box.monomer_backbone_no_hydrogen.write_gjf(fmt::format("frame_{:03d}_monomer_backbone_only_{:03d}.gjf", iframe, imonomer + 1));
+    }
 
-    molecules_box.generate_monomer(3);
-    molecules_box.monomer.write_gjf("monomer.gjf");
-    molecules_box.monomer_methyl.write_gjf("monomer_trimmed.gjf");
-    molecules_box.monomer_backbone_no_hydrogen.write_gjf("monomer_bb_noH.gjf");
-
-    molecules_box.generate_dimer(0, 54);
-    molecules_box.dimer.write_gjf("dimer.gjf");
-    molecules_box.dimer_methyl.write_gjf("dimer_trimmed.gjf");
-    molecules_box.dimer_backbone_no_hydrogen.write_gjf("dimer_bb_noH.gjf");
-
-
-
-    /*
     molecules_box.get_intermolecule_connectivity_of_selected_part();
 
-    fmt::ostream ofile(fmt::output_file("short_contact.txt"));
+    std::string ofilename = fmt::format("frame_{:03d}_short_contact.txt", iframe);
+    int idimer = 0;
+    fmt::ostream ofile(fmt::output_file(ofilename));
     ofile.print("# counts from 1\n");
     ofile.print("# natoms    npairs    imol    jmol    nx    ny    nz\n");
     for (int imol = 0; imol < molecules_box.nmols; ++ imol) {
         for (int jmol = imol + 1; jmol < molecules_box.nmols; ++ jmol) {
+            if (molecules_box.num_intermolecule_short_contact_pairs(imol, jmol) >= npairs_tol) {
+                molecules_box.generate_dimer(imol, jmol, 
+                    molecules_box.shifts_min[coord_x](imol, jmol), 
+                    molecules_box.shifts_min[coord_y](imol, jmol), 
+                    molecules_box.shifts_min[coord_z](imol, jmol)
+                );
+                molecules_box.dimer.write_gjf(fmt::format("frame_{:03d}_dimer_{:04d}.gjf", iframe, idimer + 1));
+                molecules_box.dimer_methyl.write_gjf(fmt::format("frame_{:03d}_dimer_trimmed_{:04d}.gjf", iframe, idimer + 1));
+                molecules_box.dimer_backbone_no_hydrogen.write_gjf(fmt::format("frame_{:03d}_dimer_backbone_only_{:04d}.gjf", iframe, idimer + 1));
+            }
             if (molecules_box.num_intermolecule_short_contact_pairs(imol, jmol)) {
                 ofile.print("{0:3s}{1:3d}{0:7s}{2:3d}{0:7s}{3:3d}{0:5s}{4:3d}{0:4s}{5:2d}{0:4s}{6:2d}{0:4s}{7:2d}\n", 
                     "", 
@@ -256,11 +255,11 @@ int main(int argc, const char *argv[]) {
                     static_cast<int>(molecules_box.shifts_min[coord_y](imol, jmol)), 
                     static_cast<int>(molecules_box.shifts_min[coord_z](imol, jmol))
                 );
+                ++ idimer;
             }
         }
     }
     ofile.close();
-    */
 
     return 0;
 }
@@ -734,7 +733,10 @@ void MoleculesBox::get_intermolecule_connectivity_of_selected_part() {
 
     for (int jmol = 0; jmol < nmols; ++ jmol) {
         for (int imol = jmol + 1; imol < nmols; ++ imol) {
-            std::cout << "\rhandling imol = " << std::setw(3) << imol << ", jmol = " << std::setw(3) << jmol << std::flush;
+            #ifndef NDEBUG
+            fmt::print("\rhandling imol = {:3d}, jmol = {:3d}", imol, jmol);
+            std::fflush(stdout);
+            #endif
             current = get_dist_squared_matrix_orthorhombic(coordinates_selected[imol], coordinates_selected[jmol], box);
             short_contact = (current.first.array() < atomic_van_der_Waals_radius_selected_sum_squared.array()).cast<int>();
             num_intermolecule_short_contact_atoms(imol, jmol) = 
@@ -746,7 +748,10 @@ void MoleculesBox::get_intermolecule_connectivity_of_selected_part() {
             shifts_min[coord_z](imol, jmol) = current.second[coord_z];
         }
     }
-    std::cout << "\r" << std::setw(100) << "" << "\r" << std::flush;
+    #ifndef NDEBUG
+    fmt::print("\r{:100s}\r", "");
+    std::fflush(stdout);
+    #endif
 
     for (int jmol = 0; jmol < nmols; ++ jmol) {
         for (int imol = jmol + 1; imol < nmols; ++ imol) {
@@ -952,12 +957,15 @@ void MoleculesBox::generate_monomer(int imol) {
     }
 }
 
-void MoleculesBox::generate_dimer(int imol, int jmol) {
+void MoleculesBox::generate_dimer(int imol, int jmol, char shift_a, char shift_b, char shift_c) {
     Eigen::Vector3f bond_vec;
     const float C_H_bond_len = 1.09105f; // sp3 C-H length in ethane at B3LYP-D3(BJ)/def2-TZVPP
 
     dimer.coordinates.block(0, 0, ncoords, natoms_per_mol) = coordinates[imol];
     dimer.coordinates.block(0, natoms_per_mol, ncoords, natoms_per_mol) = coordinates[jmol];
+    if (shift_a) dimer.coordinates.block(0, natoms_per_mol, ncoords, natoms_per_mol).colwise() -= box.col(0) * shift_a;
+    if (shift_b) dimer.coordinates.block(0, natoms_per_mol, ncoords, natoms_per_mol).colwise() -= box.col(1) * shift_b;
+    if (shift_c) dimer.coordinates.block(0, natoms_per_mol, ncoords, natoms_per_mol).colwise() -= box.col(2) * shift_c;
 
     for (int i = 0; i < backbone.size(); ++ i) {
         dimer_methyl.coordinates.col(i) = coordinates[imol].col(backbone[i]);
@@ -980,9 +988,15 @@ void MoleculesBox::generate_dimer(int imol, int jmol) {
         }
         iatom_in_methyl += alkyl_connection_site_connected_alkyl[imethyl].size();
     }
+    if (shift_a) dimer_methyl.coordinates.block(0, natoms_per_trimmed_mol, ncoords, natoms_per_trimmed_mol).colwise() -= box.col(0) * shift_a;
+    if (shift_b) dimer_methyl.coordinates.block(0, natoms_per_trimmed_mol, ncoords, natoms_per_trimmed_mol).colwise() -= box.col(1) * shift_b;
+    if (shift_c) dimer_methyl.coordinates.block(0, natoms_per_trimmed_mol, ncoords, natoms_per_trimmed_mol).colwise() -= box.col(2) * shift_c;
 
     for (int i = 0; i < backbone_noH.size(); ++ i) {
         dimer_backbone_no_hydrogen.coordinates.col(i) = coordinates[imol].col(backbone_noH[i]);
         dimer_backbone_no_hydrogen.coordinates.col(i + backbone_noH.size()) = coordinates[jmol].col(backbone_noH[i]);
     }
+    if (shift_a) dimer_backbone_no_hydrogen.coordinates.block(0, backbone_noH.size(), ncoords, backbone_noH.size()).colwise() -= box.col(0) * shift_a;
+    if (shift_b) dimer_backbone_no_hydrogen.coordinates.block(0, backbone_noH.size(), ncoords, backbone_noH.size()).colwise() -= box.col(1) * shift_b;
+    if (shift_c) dimer_backbone_no_hydrogen.coordinates.block(0, backbone_noH.size(), ncoords, backbone_noH.size()).colwise() -= box.col(2) * shift_c;
 }
