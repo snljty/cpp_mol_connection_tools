@@ -70,7 +70,15 @@ else()
 endif()
 
 set(SOURCES
-    src/get_gro_connectivity.cpp
+    src/gro_file_parser.cpp
+    src/distance_calculator.cpp
+    src/connectivity_analysis.cpp
+    src/molecule_utils.cpp
+    src/selection_utils.cpp
+    src/molecule_generator.cpp
+    src/utils.cpp
+    src/output_writer.cpp
+    src/main.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
