@@ -4,6 +4,8 @@
 
 #include <cmath>
 
+#include <fmt/format.h>
+
 const std::vector<std::string> elements_names = {
     "",
     "H" , "He", 
@@ -133,9 +135,9 @@ std::string list_to_indices_str_from_1(const std::vector<int> &nums) {
             ++ b;
         } else {
             if (a == b) {
-                ret_list.emplace_back(std::to_string(a + 1));
+                ret_list.emplace_back(fmt::format("{:d}", a + 1));
             } else {
-                ret_list.emplace_back(std::to_string(a + 1) + "-" + std::to_string(b + 1));
+                ret_list.emplace_back(fmt::format("{:d}-{:d}", a + 1, b + 1));
             }
             a = nums[i];
             b = a;
@@ -143,9 +145,9 @@ std::string list_to_indices_str_from_1(const std::vector<int> &nums) {
     }
     // handle last
     if (a == b) {
-        ret_list.emplace_back(std::to_string(a + 1));
+        ret_list.emplace_back(fmt::format("{:d}", a + 1));
     } else {
-        ret_list.emplace_back(std::to_string(a + 1) + "-" + std::to_string(b + 1));
+        ret_list.emplace_back(fmt::format("{:d}-{:d}", a + 1, b + 1));
     }
     // join ret_list to ret
     std::string ret;
@@ -172,9 +174,9 @@ void list_to_indices_str_from_1(const std::vector<int> &nums, std::string &resul
             ++ b;
         } else {
             if (a == b) {
-                ret_list.emplace_back(std::to_string(a + 1));
+                ret_list.emplace_back(fmt::format("{:d}", a + 1));
             } else {
-                ret_list.emplace_back(std::to_string(a + 1) + "-" + std::to_string(b + 1));
+                ret_list.emplace_back(fmt::format("{:d}-{:d}", a + 1, b + 1));
             }
             a = nums[i];
             b = a;
@@ -182,9 +184,9 @@ void list_to_indices_str_from_1(const std::vector<int> &nums, std::string &resul
     }
     // handle last
     if (a == b) {
-        ret_list.emplace_back(std::to_string(a + 1));
+        ret_list.emplace_back(fmt::format("{:d}", a + 1));
     } else {
-        ret_list.emplace_back(std::to_string(a + 1) + "-" + std::to_string(b + 1));
+        ret_list.emplace_back(fmt::format("{:d}-{:d}", a + 1, b + 1));
     }
     // join ret_list to ret
     if (! ret_list.empty()) {
@@ -196,11 +198,9 @@ void list_to_indices_str_from_1(const std::vector<int> &nums, std::string &resul
 }
 
 bool is_box_orthorhombic(const Eigen::Matrix3f &box) {
-    /*
     if (box.rows() != ncoords || box.cols() != ncoords) {
-        throw std::invalid_argument("box must be " + std::to_string(ncoords) + " by " + std::to_string(ncoords) + ".");
+        throw std::invalid_argument(fmt::format("box must be {:d} by {:d}.", ncoords, ncoords));
     }
-    */
     return box(1, 0) == 0.f && box(2, 0) == 0.f && box(2, 1) == 0.f && 
            box(0, 1) < __FLT_EPSILON__ && box(0, 2) < __FLT_EPSILON__ && box(1, 2) < __FLT_EPSILON__;
 }
