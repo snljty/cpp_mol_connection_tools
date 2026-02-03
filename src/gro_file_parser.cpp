@@ -154,7 +154,7 @@ void MoleculesBox::read_gro(const std::string &ifilename, int nmols) {
         }
     }
     box_d *= 10.;
-    if (getline(ifile, line)) {
+    if (std::getline(ifile, line)) {
         throw std::ios_base::failure("Extra line found.");
     }
     box = box_d.cast<float>();

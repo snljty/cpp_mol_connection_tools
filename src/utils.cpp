@@ -68,7 +68,7 @@ constexpr std::array<float, max_element_num> elements_covalence_radius = {
 };
 
 void getline_check(std::ifstream &ifile, std::string &line) {
-    if (! getline(ifile, line)) {
+    if (! std::getline(ifile, line)) {
         throw std::ios_base::failure("Cannot read a line.");
     }
 }
@@ -79,7 +79,7 @@ std::vector<int> indices_str_to_list_from_0(const std::string &indices) {
     std::string current_str;
     size_t pos;
     int a, b;
-    while (getline(indices_iss, current_str, ',')) {
+    while (std::getline(indices_iss, current_str, ',')) {
         current_iss.clear();
         pos = current_str.find('-');
         if (pos != std::string::npos) {
@@ -104,7 +104,7 @@ void indices_str_to_list_from_0(const std::string &indices, std::vector<int> &re
     size_t pos;
     int a, b;
     result.clear();
-    while (getline(indices_iss, current_str, ',')) {
+    while (std::getline(indices_iss, current_str, ',')) {
         current_iss.clear();
         pos = current_str.find('-');
         if (pos != std::string::npos) {
