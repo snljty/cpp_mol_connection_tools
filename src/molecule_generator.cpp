@@ -6,9 +6,7 @@ void MoleculesBox::generate_monomer(int imol) {
 
     monomer.coordinates = coordinates[imol];
 
-    for (size_t i = 0; i < backbone.size(); ++ i) {
-        monomer_methyl.coordinates.col(i) = coordinates[imol].col(backbone[i]);
-    }
+    monomer_methyl.coordinates.block(0, 0, ncoords, backbone.size()) = coordinates[imol](Eigen::all, backbone);
     int iatom_in_methyl = 0;
     for (size_t imethyl = 0; imethyl < alkyl_connection_site.size(); ++ imethyl) {
         int iatom = alkyl_connection_site[imethyl];
@@ -38,10 +36,8 @@ void MoleculesBox::generate_dimer(int imol, int jmol, char shift_a, char shift_b
     if (shift_b) dimer.coordinates.block(0, natoms_per_mol, ncoords, natoms_per_mol).colwise() -= box.col(1) * shift_b;
     if (shift_c) dimer.coordinates.block(0, natoms_per_mol, ncoords, natoms_per_mol).colwise() -= box.col(2) * shift_c;
 
-    for (size_t i = 0; i < backbone.size(); ++ i) {
-        dimer_methyl.coordinates.col(i) = coordinates[imol].col(backbone[i]);
-        dimer_methyl.coordinates.col(i + natoms_per_trimmed_mol) = coordinates[jmol].col(backbone[i]);
-    }
+    dimer_methyl.coordinates.block(0, 0, ncoords, backbone.size()) = coordinates[imol](Eigen::all, backbone);
+    dimer_methyl.coordinates.block(0, natoms_per_trimmed_mol, ncoords, backbone.size()) = coordinates[jmol](Eigen::all, backbone);
     int iatom_in_methyl = 0;
     for (size_t imethyl = 0; imethyl < alkyl_connection_site.size(); ++ imethyl) {
         int iatom = alkyl_connection_site[imethyl];
