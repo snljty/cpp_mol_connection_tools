@@ -35,5 +35,9 @@ bool is_box_orthorhombic(const Eigen::Matrix3f &box);
 
 void print_box(const Eigen::Matrix3f &box);
 
+Eigen::MatrixXf fractional_coordinates_to_Cartesian_coordinates(const Eigen::MatrixXf &fcoords, const Eigen::Matrix3f &box);
+
+Eigen::MatrixXf Cartesian_coordinates_to_fractional_coordinates(const Eigen::MatrixXf &coords, const Eigen::Matrix3f &box);
+
 #endif // __UTILS_HPP__
 

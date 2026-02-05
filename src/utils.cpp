@@ -205,6 +205,15 @@ bool is_box_orthorhombic(const Eigen::Matrix3f &box) {
            box(0, 1) < __FLT_EPSILON__ && box(0, 2) < __FLT_EPSILON__ && box(1, 2) < __FLT_EPSILON__;
 }
 
+Eigen::MatrixXf fractional_coordinates_to_Cartesian_coordinates(const Eigen::MatrixXf &fcoords, const Eigen::Matrix3f &box) {
+    return box * fcoords;
+}
+
+Eigen::MatrixXf Cartesian_coordinates_to_fractional_coordinates(const Eigen::MatrixXf &coords, const Eigen::Matrix3f &box) {
+    Eigen::Matrix3f destroy_box(box);
+    return destroy_box.lu().solve(coords);
+}
+
 Element_table::Element_table() {
     for (size_t i = 0; i < elements_names.size(); ++ i) {
         table.insert({elements_names[i], i});
